@@ -1,0 +1,96 @@
+buildscript {
+    repositories {
+        maven { url 'https://www.dimdev.org/maven/' }
+        maven { url = 'http://repo.spongepowered.org/maven' }
+        maven { url = 'https://plugins.gradle.org/m2/' }
+    }
+
+    dependencies {
+        classpath "org.dimdev:ForgeGradle:${project.forgeGradleVersion}"
+        classpath "org.spongepowered:mixingradle:${project.mixinGradleVersion}"
+        classpath "com.github.jengelman.gradle.plugins:shadow:2.0.0"
+    }
+}
+
+group = 'me.deftware'
+version = project.version
+
+apply plugin: 'maven'
+apply plugin: 'java'
+apply plugin: 'net.minecraftforge.gradle.tweaker-client'
+apply plugin: 'org.spongepowered.mixin'
+apply plugin: "com.github.johnrengelman.shadow"
+
+sourceCompatibility = targetCompatibility = 1.8
+
+minecraft {
+    version = project.minecraftVersion
+    runDir = 'run'
+    mappings = project.mappingsVer
+    makeObfSourceJar = true
+    tweakClass = 'me.deftware.launch.Launcher'
+}
+
+repositories {
+    mavenCentral()
+    maven { url = 'http://repo.spongepowered.org/maven/' }
+    maven { url 'https://libraries.minecraft.net/' }
+    maven { url 'https://www.dimdev.org/maven/' }
+}
+
+configurations {
+    deps
+    compile {
+        extendsFrom deps
+    }
+}
+
+dependencies {
+    implementation('org.dimdev:mixin:0.7.11-SNAPSHOT') { transitive = false }
+    implementation('net.minecraft:launchwrapper:1.12') { transitive = false }
+    implementation 'com.google.code.gson:gson:2.8.5'
+    implementation 'org.ow2.asm:asm:6.2'
+    implementation 'org.ow2.asm:asm-commons:6.2'
+}
+
+mixin {
+    defaultObfuscationEnv notch
+    add sourceSets.main, "mixins.protocolhack.refmap.json"
+}
+
+shadowJar {
+    dependencies {
+        include('org.dimdev:mixin')
+    }
+    classifier = 'full'
+}
+
+task createPom << {
+    pom {
+        project {
+            groupId "me.deftware"
+            artifactId "protocolhack"
+            version "${version}-${project.minecraftVersion}"
+        }
+    }.writeTo("maven/me/deftware/protocolhack/${version}-${project.minecraftVersion}/protocolhack-${version}-${project.minecraftVersion}.pom")
+}
+
+task copyBuilds(type: Copy) {
+    from "$rootDir/build/libs"
+    into "$rootDir/maven/me/deftware/protocolhack/${version}-${project.minecraftVersion}/"
+    rename { String fileName ->
+        fileName.replace(version, "${version}-${project.minecraftVersion}")
+    }
+}
+
+reobf {
+    shadowJar {
+        mappingType = 'NOTCH'
+        classpath = sourceSets.main.compileClasspath
+    }
+}
+
+delete "$rootDir/build/libs"
+build.dependsOn(shadowJar)
+build.dependsOn(createPom)
+build.dependsOn(copyBuilds)
